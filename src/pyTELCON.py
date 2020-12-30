@@ -62,7 +62,7 @@ class TelemetryReader:
 	def sync(self):
 		try:
 			while True:
-				data = self.sock.recv(1024)
+				data = self.sock.recv(1)
 				if len(data) == 0:
 					break
 
@@ -88,6 +88,9 @@ class TelemetryReader:
 		except KeyboardInterrupt:
 			print("Stopping dump")
 
+	def close(self):
+		self.sock.close()
+
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Monitor NASSP telemetry stream.")
@@ -100,5 +103,5 @@ if __name__ == '__main__':
 		reader = TelemetryReader(args.host, args.port)
 		reader.sync()
 	except KeyboardInterrupt:
-		pass # Close
+		reader.close()
 
