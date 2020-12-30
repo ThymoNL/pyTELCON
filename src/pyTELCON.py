@@ -43,6 +43,7 @@ class TelemetryLock(Enum):
 class TelemetryReader:
 	sock = None
 	lock = TelemetryLock.SYNC0
+	wordc = 0
 
 	def __init__(self, host, port):
 		self.sock = socket.socket()
@@ -51,7 +52,7 @@ class TelemetryReader:
 	def dump(self):
 		try:
 			while True:
-				data = self.sock.recv(1)
+				data = self.sock.recv(1024)
 				if len(data) == 0:
 					break
 
@@ -62,31 +63,67 @@ class TelemetryReader:
 	def sync(self):
 		try:
 			while True:
-				data = self.sock.recv(1)
+				data = self.sock.recv(1024)
 				if len(data) == 0:
 					break
 
-				word = int.from_bytes(data, "big")
-
-				if self.lock == TelemetryLock.SYNC0:
-					if word == 0o5:
-						print("SYNC0")
-						self.lock = TelemetryLock.SYNC1
-				elif self.lock == TelemetryLock.SYNC1:
-					if word == 0o171:
-						print("SYNC1")
-						self.lock = TelemetryLock.SYNC2
-					else:
-						self.lock = TelemetryLock.SYNC0
-				elif self.lock == TelemetryLock.SYNC2:
-					if word == 0o267:
-						print("SYNC2")
-						self.lock = TelemetryLock.LBRSYNC1
-					else:
-						self.lock = TelemetryLock.SYNC0
+				for word in data:
+					if self.lock == TelemetryLock.SYNC0:
+						if word == 0o5:
+							print("SYNC0")
+							self.lock = TelemetryLock.SYNC1
+					elif self.lock == TelemetryLock.SYNC1:
+						if word == 0o171:
+							print("SYNC1")
+							self.lock = TelemetryLock.SYNC2
+						else:
+							self.lock = TelemetryLock.SYNC0
+					elif self.lock == TelemetryLock.SYNC2:
+						if word == 0o267:
+							print("SYNC2")
+							self.lock = TelemetryLock.LBRSYNC1
+							wordc = 3
+						else:
+							self.lock = TelemetryLock.SYNC0
+					elif self.lock == TelemetryLock.LBRSYNC1:
+						if wordc == 40:
+							if word == 0o5:
+								print("LBRSYNC1")
+								self.lock = TelemetryLock.LBRSYNC2
+							else:
+								print("Possbile HBR during LBRSYNC1. Restart.")
+								self.lock = TelemetryLock.SYNC0
+						elif wordc > 100: # Lost lock, start over
+							print("Lost during LBRSYNC1")
+							self.lock = TelemetryLock.SYNC0
+						wordc += 1
+					elif self.lock == TelemetryLock.LBRSYNC2:
+						if word == 0o171:
+							print("LBRSYNC2")
+							self.lock = TelemetryLock.LBRSYNC3
+						else:
+							print("Possible HBR during LBRSYNC2. Restart.")
+							self.lock = TelemetryLock.SYNC0
+						wordc += 1
+					elif self.lock == TelemetryLock.LBRSYNC3:
+						if word == 0o267:
+							print("LBRSYNC3")
+							self.lock = TelemetryLock.LBR # Locked
+							wordc = 3
+							print("Locked on LBR")
+						else:
+							print("Possible HBR during LBRSYNC3. Restart.")
+							self.lock = TelemetryLock.SYNC0
+						wordc += 1
+					elif self.lock == TelemetryLock.LBR:
+						#TODO: Parse data
+						wordc += 1
+						if wordc > 39:
+							wordc = 0
+							print("Next frame")
 
 		except KeyboardInterrupt:
-			print("Stopping dump")
+			print("Stopping sync")
 
 	def close(self):
 		self.sock.close()
