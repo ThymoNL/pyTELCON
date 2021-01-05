@@ -141,4 +141,7 @@ if __name__ == '__main__':
 		reader.sync()
 	except KeyboardInterrupt:
 		reader.close()
+	except ConnectionRefusedError:
+		print("Connection refused")
+		sys.exit(1)
 
